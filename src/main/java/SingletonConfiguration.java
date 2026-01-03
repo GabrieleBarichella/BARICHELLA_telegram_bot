@@ -10,7 +10,7 @@ public class SingletonConfiguration {
     private SingletonConfiguration() {
         Configurations configurations = new Configurations();
         try {
-            configuration = configurations.properties("config.properties"); //check
+            configuration = configurations.properties("config.properties");
         } catch (ConfigurationException e) {
             System.err.println("Nonexistent file.");
             System.exit(-1);

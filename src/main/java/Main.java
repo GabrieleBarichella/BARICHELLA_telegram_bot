@@ -4,15 +4,12 @@ public class Main {
 
         String botToken = SingletonConfiguration.getInstance().getProperty("BOT_TOKEN");
 
-        // Using try-with-resources to allow autoclose to run upon finishing
         try (TelegramBotsLongPollingApplication botsApplication = new TelegramBotsLongPollingApplication()) {
             botsApplication.registerBot(botToken, new AnimangaTracker(botToken));
-            System.out.println("MyAmazingBot successfully started!");
-            // Ensure this process wait forever
+            System.out.println("Bot successfully started!");
             Thread.currentThread().join();
         } catch (Exception e) {
             e.printStackTrace();
         }
-
     }
 }
