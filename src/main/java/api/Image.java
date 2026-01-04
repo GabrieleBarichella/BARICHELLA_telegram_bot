@@ -1,7 +1,5 @@
 package api;
 
-import org.telegram.telegrambots.meta.api.objects.InputFile;
-
 public class Image {
     private String small;
     private String original;
