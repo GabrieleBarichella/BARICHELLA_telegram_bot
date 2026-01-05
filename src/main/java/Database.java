@@ -28,9 +28,9 @@ public class Database {
         if(checkConnectionError()) return;
 
         String sql = """
-            INSERT INTO users(user_id, username)
-            VALUES (?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET username = excluded.username
+        INSERT INTO users(user_id, username)
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET username = excluded.username
         """;
 
         try {
@@ -44,22 +44,48 @@ public class Database {
         }
     }
 
-    public void addAnime(Anime anime) throws SQLException {
+    public void addUserGame(long userId, int gameId, int points) {
+        String insertSql = "INSERT INTO user_games(user_id, game_id, score) VALUES (?, ?, ?)";
+        try {
+            PreparedStatement ps = connection.prepareStatement(insertSql);
+            ps.setLong(1, userId);
+            ps.setInt(2, gameId);
+            ps.setInt(3, points);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+    }
+
+    public void addFavorite(long userId, String animeId) {
+        String sql = "INSERT OR IGNORE INTO favorites(user_id, anime_id) VALUES (?, ?)";
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, animeId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+    }
+
+    public void addAnime(Anime anime) {
         String sql = """
-            INSERT OR REPLACE INTO anime (
-                anime_id,
-                title,
-                synopsis,
-                episode_count,
-                average_rating,
-                status,
-                poster_url,
-                last_updated
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT OR REPLACE INTO anime (
+            anime_id,
+            title,
+            synopsis,
+            episode_count,
+            average_rating,
+            status,
+            poster_url,
+            last_updated
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """;
 
-        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
             ps.setInt(1, Integer.parseInt(anime.getId()));
             ps.setString(2, anime.getAttributes().getCanonicalTitle());
             ps.setString(3, anime.getAttributes().getSynopsis());
@@ -69,6 +95,26 @@ public class Database {
             ps.setString(7, anime.getAttributes().getPosterImage().getOriginal());
 
             ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+    }
+
+    public void addOrUpdateUserAnime(long userId, String animeId, String state) {
+        String sql = """
+        INSERT INTO user_anime(user_id, anime_id, state)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id, anime_id) DO UPDATE SET state = excluded.state
+        """;
+
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, animeId);
+            ps.setString(3, state);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
         }
     }
 
@@ -89,6 +135,77 @@ public class Database {
         }
 
         return 0;
+    }
+
+    public String getUserAnimeState(long userId, String animeId) {
+        String sql = "SELECT state FROM user_anime WHERE user_id = ? AND anime_id = ?";
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, animeId);
+            ResultSet rs = ps.executeQuery();
+            return rs.next() ? rs.getString("state") : null;
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+            return null;
+        }
+    }
+
+    public List<String> getUserFavorites(long userId) {
+        List<String> favorites = new ArrayList<>();
+
+        String sql = """
+        SELECT a.title
+        FROM favorites f
+        JOIN anime a ON a.anime_id = f.anime_id
+        WHERE f.user_id = ?
+        ORDER BY a.title
+        """;
+
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) favorites.add(rs.getString("title"));
+
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+
+        return favorites;
+    }
+
+    public List<String> getUserAnimeByState(long userId, String state) {
+
+        if (checkConnectionError()) return List.of();
+
+        String sql = """
+        SELECT a.title
+        FROM user_anime ua
+        JOIN anime a ON a.anime_id = ua.anime_id
+        WHERE ua.user_id = ?
+        AND ua.state = ?
+        ORDER BY a.title
+        """;
+
+        List<String> result = new ArrayList<>();
+
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, state);
+
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                result.add(rs.getString("title"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+            return null;
+        }
+
+        return result;
     }
 
     public Map<String, Integer> getUserGameStats(long userId) {
@@ -116,83 +233,6 @@ public class Database {
         }
 
         return Map.of("games_played", 0, "total_score", 0);
-    }
-
-    public List<String> getUserAnimeByState(long userId, String state) {
-
-        if (checkConnectionError()) return List.of();
-
-        String sql = """
-            SELECT a.title
-            FROM user_anime ua
-            JOIN anime a ON a.anime_id = ua.anime_id
-            WHERE ua.user_id = ?
-            AND ua.state = ?
-            ORDER BY a.title
-        """;
-
-        List<String> result = new ArrayList<>();
-
-        try {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, userId);
-            ps.setString(2, state);
-
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                result.add(rs.getString("title"));
-            }
-        } catch (SQLException e) {
-            System.err.println("Query error: " + e.getMessage());
-            return null;
-        }
-
-        return result;
-    }
-
-    public String getUserAnimeState(long userId, String animeId) {
-        String sql = "SELECT state FROM user_anime WHERE user_id = ? AND anime_id = ?";
-        try {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, userId);
-            ps.setString(2, animeId);
-            ResultSet rs = ps.executeQuery();
-            return rs.next() ? rs.getString("state") : null;
-        } catch (SQLException e) {
-            System.err.println("Query error: " + e.getMessage());
-            return null;
-        }
-    }
-
-    public void addOrUpdateUserAnime(long userId, String animeId, String state) {
-        String sql = """
-            INSERT INTO user_anime(user_id, anime_id, state)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id, anime_id) DO UPDATE SET state = excluded.state
-        """;
-
-        try {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, userId);
-            ps.setString(2, animeId);
-            ps.setString(3, state);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Query error: " + e.getMessage());
-        }
-    }
-
-    public void addUserGame(long userId, int gameId, int points) {
-        String insertSql = "INSERT INTO user_games(user_id, game_id, score) VALUES (?, ?, ?)";
-        try {
-            PreparedStatement ps = connection.prepareStatement(insertSql);
-            ps.setLong(1, userId);
-            ps.setInt(2, gameId);
-            ps.setInt(3, points);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Query error: " + e.getMessage());
-        }
     }
 
     public List<Map<String, Object>> getTopUsers(int limit) {
@@ -226,44 +266,6 @@ public class Database {
         return result;
     }
 
-    public void removeUserAnime(long userId, String animeId) {
-        String sql = "DELETE FROM user_anime WHERE user_id = ? AND anime_id = ?";
-        try {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, userId);
-            ps.setString(2, animeId);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            System.err.println("Query error: " + e.getMessage());
-        }
-    }
-
-    public List<String> getUserFavorites(long userId) {
-        List<String> favorites = new ArrayList<>();
-
-        String sql = """
-        SELECT a.title
-        FROM favorites f
-        JOIN anime a ON a.anime_id = f.anime_id
-        WHERE f.user_id = ?
-        ORDER BY a.title
-        """;
-
-        try {
-            PreparedStatement ps = connection.prepareStatement(sql);
-            ps.setLong(1, userId);
-            ResultSet rs = ps.executeQuery();
-
-            while (rs.next()) {
-                favorites.add(rs.getString("title"));
-            }
-        } catch (SQLException e) {
-            System.err.println("Query error: " + e.getMessage());
-        }
-
-        return favorites;
-    }
-
     public boolean isFavorite(long userId, String animeId) {
         String sql = "SELECT 1 FROM favorites WHERE user_id = ? AND anime_id = ?";
         try {
@@ -277,8 +279,8 @@ public class Database {
         }
     }
 
-    public void addFavorite(long userId, String animeId) {
-        String sql = "INSERT OR IGNORE INTO favorites(user_id, anime_id) VALUES (?, ?)";
+    public void removeFavorite(long userId, String animeId) {
+        String sql = "DELETE FROM favorites WHERE user_id = ? AND anime_id = ?";
         try {
             PreparedStatement ps = connection.prepareStatement(sql);
             ps.setLong(1, userId);
@@ -289,8 +291,8 @@ public class Database {
         }
     }
 
-    public void removeFavorite(long userId, String animeId) {
-        String sql = "DELETE FROM favorites WHERE user_id = ? AND anime_id = ?";
+    public void removeUserAnime(long userId, String animeId) {
+        String sql = "DELETE FROM user_anime WHERE user_id = ? AND anime_id = ?";
         try {
             PreparedStatement ps = connection.prepareStatement(sql);
             ps.setLong(1, userId);

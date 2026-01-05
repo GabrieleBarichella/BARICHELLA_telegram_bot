@@ -18,11 +18,11 @@ public class API {
     private static String base_url = "https://kitsu.io/api/edge/";
     private static Gson gson = new Gson();
 
-    private static HttpRequest getHttpRequest(String url, String method, HttpRequest.BodyPublisher body) {
+    private static HttpRequest getHttpRequest(String url, HttpRequest.BodyPublisher body) {
         return HttpRequest.newBuilder()
                 .header("Content-Type", "application/json")
                 .uri(java.net.URI.create(url))
-                .method(method, body)
+                .method("GET", body)
                 .build();
     }
 
@@ -36,42 +36,12 @@ public class API {
         }
     }
 
-    public static List<Anime> search(String title) {
-        List<Anime> animeList = new ArrayList<>();
-
-        try {
-            String encodedTitle = URLEncoder.encode(title, StandardCharsets.UTF_8);
-            String url = base_url + "anime?filter[text]=" + encodedTitle;
-
-            HttpRequest request = getHttpRequest(url, "GET", HttpRequest.BodyPublishers.noBody());
-            HttpResponse<String> response = getHttpResponse(request);
-
-            if (response.statusCode() == 200) {
-                JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-                JsonArray data = json.getAsJsonArray("data");
-
-                for (int i = 0; i < data.size(); i++) {
-                    JsonObject animeJson = data.get(i).getAsJsonObject();
-                    Anime a = gson.fromJson(animeJson, Anime.class);
-                    animeList.add(a);
-                }
-            } else {
-                System.out.println("Errore API: " + response.statusCode());
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        return animeList;
-    }
-
     public static Anime searchById(String id) {
         Anime anime = null;
 
         try {
             String url = base_url + "anime/" + id;
-            HttpRequest request = getHttpRequest(url, "GET", HttpRequest.BodyPublishers.noBody());
+            HttpRequest request = getHttpRequest(url, HttpRequest.BodyPublishers.noBody());
             HttpResponse<String> response = getHttpResponse(request);
 
             if (response != null && response.statusCode() == 200) {
@@ -90,41 +60,55 @@ public class API {
         return anime;
     }
 
+    public static List<Anime> search(String title) {
+
+        List<Anime> animeList = new ArrayList<>();
+
+        try {
+            String encodedTitle = URLEncoder.encode(title, StandardCharsets.UTF_8);
+            String url = base_url + "anime?filter[text]=" + encodedTitle;
+
+            animeList = fetchAnimeFromUrl(url);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return animeList;
+    }
+
     public static List<Anime> searchByPopularity(){
         return searchByPopularity(300);
     }
 
     public static List<Anime> searchByPopularity(int limit) {
+
         List<Anime> animeList = new ArrayList<>();
+
         limit = Math.min(limit, 300);
         int perPage = 20;
 
         try {
             for (int offset = 0; offset < limit; offset += perPage) {
-                String url = base_url + "anime?sort=popularityRank&page[limit]=" + perPage + "&page[offset]=" + offset;
 
-                HttpRequest request = getHttpRequest(url, "GET", HttpRequest.BodyPublishers.noBody());
-                HttpResponse<String> response = getHttpResponse(request);
+                String url = base_url
+                        + "anime?sort=popularityRank"
+                        + "&page[limit]=" + perPage
+                        + "&page[offset]=" + offset;
 
-                if (response.statusCode() == 200) {
-                    JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-                    JsonArray data = json.getAsJsonArray("data");
+                List<Anime> pageResults = fetchAnimeFromUrl(url);
+                animeList.addAll(pageResults);
 
-                    for (int j = 0; j < data.size(); j++) {
-                        JsonObject animeJson = data.get(j).getAsJsonObject();
-                        Anime a = gson.fromJson(animeJson, Anime.class);
-                        animeList.add(a);
-                    }
-
-                } else {
-                    System.out.println("Errore API: " + response.statusCode());
-                }
+                if (animeList.size() >= limit) break;
             }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
 
-        return animeList.size() > limit ? animeList.subList(0, limit) : animeList;
+        return animeList.size() > limit
+                ? animeList.subList(0, limit)
+                : animeList;
     }
 
     public static List<Anime> getRandomAnime(int limit) {
@@ -142,6 +126,40 @@ public class API {
         }
 
         return randomList;
+    }
+
+    private static List<Anime> fetchAnimeFromUrl(String url) {
+
+        List<Anime> animeList = new ArrayList<>();
+
+        try {
+            HttpRequest request = getHttpRequest(url, HttpRequest.BodyPublishers.noBody());
+            HttpResponse<String> response = getHttpResponse(request);
+
+            if (response == null) {
+                System.out.println("Errore API: response is null");
+                return animeList;
+            }
+
+            if (response.statusCode() != 200) {
+                System.out.println("Errore API: " + response.statusCode());
+                return animeList;
+            }
+
+            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            JsonArray data = json.getAsJsonArray("data");
+
+            for (int i = 0; i < data.size(); i++) {
+                JsonObject animeJson = data.get(i).getAsJsonObject();
+                Anime anime = gson.fromJson(animeJson, Anime.class);
+                animeList.add(anime);
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return animeList;
     }
 
     public static boolean isAnimeId(String id) {
