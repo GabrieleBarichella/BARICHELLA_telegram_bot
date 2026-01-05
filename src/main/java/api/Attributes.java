@@ -1,12 +1,9 @@
 package api;
 
-import java.time.OffsetDateTime;
 import java.util.Map;
 
 public class Attributes {
-    private String slug;
     private String synopsis;
-    private Map<String, String> titles;
     private String canonicalTitle;
     private double averageRating;
     private Image posterImage;
@@ -16,9 +13,7 @@ public class Attributes {
     private String status;
     private String updatedAt;
 
-    public String getSlug() { return slug; }
     public String getSynopsis() { return synopsis; }
-    public Map<String, String> getTitles() { return titles; }
     public String getCanonicalTitle() { return canonicalTitle; }
     public double getAverageRating() { return averageRating; }
     public Image getPosterImage() { return posterImage; }

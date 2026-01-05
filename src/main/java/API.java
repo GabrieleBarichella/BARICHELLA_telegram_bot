@@ -3,6 +3,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.checkerframework.checker.units.qual.A;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -10,8 +11,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class API {
 
@@ -89,6 +89,60 @@ public class API {
         }
 
         return anime;
+    }
+
+    public static List<Anime> searchByPopularity(){
+        return searchByPopularity(300);
+    }
+
+    public static List<Anime> searchByPopularity(int limit) {
+        List<Anime> animeList = new ArrayList<>();
+        limit = Math.min(limit, 300);
+        int perPage = 20;
+
+        try {
+            for (int offset = 0; offset < limit; offset += perPage) {
+                String url = base_url + "anime?sort=popularityRank&page[limit]=" + perPage + "&page[offset]=" + offset;
+
+                HttpRequest request = getHttpRequest(url, "GET", HttpRequest.BodyPublishers.noBody());
+                HttpResponse<String> response = getHttpResponse(request);
+
+                if (response.statusCode() == 200) {
+                    JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+                    JsonArray data = json.getAsJsonArray("data");
+
+                    for (int j = 0; j < data.size(); j++) {
+                        JsonObject animeJson = data.get(j).getAsJsonObject();
+                        Anime a = gson.fromJson(animeJson, Anime.class);
+                        animeList.add(a);
+                    }
+
+                } else {
+                    System.out.println("Errore API: " + response.statusCode());
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return animeList.size() > limit ? animeList.subList(0, limit) : animeList;
+    }
+
+    public static List<Anime> getRandomAnime(int limit) {
+        List<Anime> randomList = new ArrayList<>();
+        List<Anime> popularList = searchByPopularity();
+        Random r =  new Random();
+
+        try {
+            for(int i = 0; i < limit; i++) {
+                randomList.add(popularList.get(r.nextInt(popularList.size())));
+            }
+            Collections.shuffle(randomList);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return randomList;
     }
 
     public static boolean isAnimeId(String id) {
