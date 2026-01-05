@@ -238,6 +238,69 @@ public class Database {
         }
     }
 
+    public List<String> getUserFavorites(long userId) {
+        List<String> favorites = new ArrayList<>();
+
+        String sql = """
+        SELECT a.title
+        FROM favorites f
+        JOIN anime a ON a.anime_id = f.anime_id
+        WHERE f.user_id = ?
+        ORDER BY a.title
+        """;
+
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                favorites.add(rs.getString("title"));
+            }
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+
+        return favorites;
+    }
+
+    public boolean isFavorite(long userId, String animeId) {
+        String sql = "SELECT 1 FROM favorites WHERE user_id = ? AND anime_id = ?";
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, animeId);
+            return ps.executeQuery().next();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public void addFavorite(long userId, String animeId) {
+        String sql = "INSERT OR IGNORE INTO favorites(user_id, anime_id) VALUES (?, ?)";
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, animeId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+    }
+
+    public void removeFavorite(long userId, String animeId) {
+        String sql = "DELETE FROM favorites WHERE user_id = ? AND anime_id = ?";
+        try {
+            PreparedStatement ps = connection.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setString(2, animeId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("Query error: " + e.getMessage());
+        }
+    }
+
     public boolean checkConnectionError(){
         try {
             if(connection == null || !connection.isValid(5)) {

@@ -43,6 +43,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             case "start": handleStart(chatId, username); break;
             case "play": handlePlay(chatId); break;
             case "list": handleList(chatId); break;
+            case "favorites": handleFavorites(chatId); break;
             case "leaderboard": handleLeaderboard(chatId); break;
             case "suggestion": handleSuggestion(chatId); break;
             case "stats": handleStats(chatId); break;
@@ -51,7 +52,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
         }
     }
 
-    private InlineKeyboardMarkup buildAnimeKeyboard(Anime anime, String currentState) {
+    private InlineKeyboardMarkup buildAnimeKeyboard(Anime anime, String currentState, boolean isFavorite) {
         if (currentState == null) currentState = "";
 
         InlineKeyboardButton watchingBtn = InlineKeyboardButton.builder()
@@ -69,12 +70,18 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
                 .callbackData(anime.getId() + "_WATCHLIST")
                 .build();
 
+        InlineKeyboardButton favoriteBtn = InlineKeyboardButton.builder()
+                .text("Favorite " + (isFavorite ? "⭐" : "☆"))
+                .callbackData(anime.getId() + "_FAVORITE")
+                .build();
+
         InlineKeyboardRow row1 = new InlineKeyboardRow();
         row1.add(watchingBtn);
         row1.add(completedBtn);
 
         InlineKeyboardRow row2 = new InlineKeyboardRow();
         row2.add(watchlistBtn);
+        row2.add(favoriteBtn);
 
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(row1, row2))
@@ -96,8 +103,8 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             db.addUserGame(answer.getUser().getId(), game.gameId, points);
 
             String text = correct
-                    ? "✅ Risposta corretta! Hai guadagnato " + points + " punti."
-                    : "❌ Risposta sbagliata! L'anime corretto era: " + game.correctTitle;
+                    ? "✅ Correct Answer! You Earned " + points + " points."
+                    : "❌ Wrong Answer! The correct option was: " + game.correctTitle;
 
             SendMessage msg = SendMessage.builder()
                     .chatId(answer.getUser().getId())
@@ -162,17 +169,32 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
         String[] parts = data.split("_");
         if (parts.length == 2) {
             String animeId = parts[0];
-            String newState = parts[1];
+            String action = parts[1];
 
             try {
                 Database db = Database.getInstance();
-                String currentState = db.getUserAnimeState(chatId, animeId);
 
-                if (newState.equals(currentState)) db.removeUserAnime(chatId, animeId);
-                else db.addOrUpdateUserAnime(chatId, animeId, newState);
+                if ("FAVORITE".equals(action)) {
+                    if (db.isFavorite(chatId, animeId)) {
+                        db.removeFavorite(chatId, animeId);
+                    } else {
+                        db.addFavorite(chatId, animeId);
+                    }
+                } else {
+                    String currentState = db.getUserAnimeState(chatId, animeId);
+                    if (action.equals(currentState)) {
+                        db.removeUserAnime(chatId, animeId);
+                    } else {
+                        db.addOrUpdateUserAnime(chatId, animeId, action);
+                    }
+                }
 
                 Anime anime = API.searchById(animeId);
-                InlineKeyboardMarkup keyboard = buildAnimeKeyboard(anime, db.getUserAnimeState(chatId, animeId));
+                String state = db.getUserAnimeState(chatId, animeId);
+                boolean isFavorite = db.isFavorite(chatId, animeId);
+
+                InlineKeyboardMarkup keyboard =
+                        buildAnimeKeyboard(anime, state, isFavorite);
 
                 EditMessageReplyMarkup edit = EditMessageReplyMarkup.builder()
                         .chatId(chatId)
@@ -185,8 +207,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
                 telegramClient.execute(
                         AnswerCallbackQuery.builder()
                                 .callbackQueryId(callbackQuery.getId())
-                                .text("Anime list updated!")
-                                .showAlert(false)
+                                .text("Aggiornato ✅")
                                 .build()
                 );
 
@@ -215,13 +236,13 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             SendPhoto photo = SendPhoto.builder()
                     .chatId(chatId)
                     .photo(new InputFile(correctAnime.getAttributes().getPosterImage().getOriginal()))
-                    .caption("🎨 Ecco il poster! Ora indovina...")
+                    .caption("🎨 Here's the poster! Now guess...")
                     .build();
             telegramClient.execute(photo);
 
             SendPoll poll = SendPoll.builder()
                     .chatId(chatId)
-                    .question("🎨 Indovina l'anime dal poster!")
+                    .question("🎨 Guess the anime from its poster!")
                     .options(pollOptions)
                     .type("quiz")
                     .correctOptionId(correctIndex)
@@ -245,10 +266,10 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
 
             Anime correctAnime = options.get((int) (Math.random() * 3));
 
-            String statsText = "📊 Indovina l'anime dai dati!\n\n" +
-                    "Episodi: " + correctAnime.getAttributes().getEpisodeCount() + " • " +
+            String statsText = "📊 Guess the anime from its data!\n\n" +
+                    "Episodes: " + correctAnime.getAttributes().getEpisodeCount() + " • " +
                     "Rating: " + correctAnime.getAttributes().getAverageRating() + " • " +
-                    "Stato: " + correctAnime.getAttributes().getStatus();
+                    "Status: " + correctAnime.getAttributes().getStatus();
 
             List<InputPollOption> pollOptions = new ArrayList<>();
             int correctIndex = -1;
@@ -307,7 +328,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
 
             InlineKeyboardMarkup markup = InlineKeyboardMarkup.builder().keyboard(List.of(row1, row2)).build();
 
-            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Scegli il tipo di gioco a cui vuoi giocare:").replyMarkup(markup).build());
+            telegramClient.execute(SendMessage.builder().chatId(chatId).text("Choose the game tou want to play:").replyMarkup(markup).build());
         } catch (Exception e) { e.printStackTrace(); }
     }
 
@@ -327,6 +348,47 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
         } catch (Exception e) { e.printStackTrace(); }
     }
 
+    private void handleFavorites(long chatId) {
+        try {
+            Database db = Database.getInstance();
+            List<String> favorites = db.getUserFavorites(chatId);
+
+            if (favorites.isEmpty()) {
+                telegramClient.execute(
+                        SendMessage.builder()
+                                .chatId(chatId)
+                                .text("⭐ You don't have any favorites yet.")
+                                .build()
+                );
+                return;
+            }
+
+            StringBuilder text = new StringBuilder("⭐ <b>Your Favorite Anime:</b>\n\n");
+            for (String title : favorites) {
+                text.append("• ").append(title).append("\n");
+            }
+
+            telegramClient.execute(
+                    SendMessage.builder()
+                            .chatId(chatId)
+                            .parseMode("HTML")
+                            .text(text.toString())
+                            .build()
+            );
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            try {
+                telegramClient.execute(
+                        SendMessage.builder()
+                                .chatId(chatId)
+                                .text("❌ Error retrieving favorites.")
+                                .build()
+                );
+            } catch (TelegramApiException ignored) {}
+        }
+    }
+
     private void handleLeaderboard(long chatId) {
         try {
             Database db = Database.getInstance();
@@ -335,7 +397,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             if (topUsers.isEmpty()) {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("🏆 La leaderboard è vuota. Nessun punteggio registrato.")
+                        .text("🏆 The leaderboard is empty.")
                         .build());
                 return;
             }
@@ -348,7 +410,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
                         ? row.get("username").toString()
                         : row.get("chat_id").toString();
                 int points = ((Number) row.get("total_points")).intValue();
-                text.append(rank).append(". ").append(user).append(" – ").append(points).append(" punti\n");
+                text.append(rank).append(". ").append(user).append(" – ").append(points).append(" points\n");
                 rank++;
             }
 
@@ -363,7 +425,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             try {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("⚠️ Si è verificato un errore durante il recupero della leaderboard.")
+                        .text("⚠️ Error retrieving leaderboard.")
                         .build());
             } catch (TelegramApiException ex) {
                 ex.printStackTrace();
@@ -378,7 +440,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             if (randomAnimeList.isEmpty()) {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("Non sono riuscito a trovare un suggerimento 😔")
+                        .text("Could not find any suggestion 😔")
                         .build());
                 return;
             }
@@ -386,7 +448,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             Anime anime = randomAnimeList.getFirst();
 
             String caption = "<b>" + anime.getAttributes().getCanonicalTitle() + "</b>\n"
-                    + "Episodi: " + anime.getAttributes().getEpisodeCount() + "\n"
+                    + "Episodes: " + anime.getAttributes().getEpisodeCount() + "\n"
                     + "Rating: " + anime.getAttributes().getAverageRating() + "\n"
                     + "Status: " + anime.getAttributes().getStatus();
 
@@ -404,7 +466,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             try {
                 telegramClient.execute(SendMessage.builder()
                         .chatId(chatId)
-                        .text("Si è verificato un errore nel suggerire un anime 😔")
+                        .text("Error suggesting anime 😔")
                         .build());
             } catch (TelegramApiException ex) {
                 ex.printStackTrace();
@@ -423,11 +485,11 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
             int gamesPlayed = gameStats.get("games_played");
 
             String text = """
-            📊 <b>Le tue statistiche</b>
+            📊 <b>Your statistics</b>
 
-            🎮 <b>Punti totali:</b> %d
-            🕹️ <b>Partite giocate:</b> %d
-            ✅ <b>Anime completati:</b> %d
+            🎮 <b>Total Points:</b> %d
+            🕹️ <b>Games Played:</b> %d
+            ✅ <b>Completed Anime:</b> %d
             """.formatted(totalScore, gamesPlayed, completedAnime);
 
             SendMessage msg = SendMessage.builder()
@@ -444,7 +506,7 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
                 telegramClient.execute(
                         SendMessage.builder()
                                 .chatId(chatId)
-                                .text("❌ Errore nel recupero delle statistiche.")
+                                .text("❌ Errore retrieving statistics.")
                                 .build()
                 );
             } catch (TelegramApiException ignored) {}
@@ -468,6 +530,9 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
         • Watchlist
         • Watching
         • Completed
+        
+        ⭐ <b>/favorites</b>
+        View your favorite anime list.
         
         🎮 <b>/play</b>
         Play anime guessing games and earn points.
@@ -500,13 +565,17 @@ public class AnimangaTracker implements org.telegram.telegrambots.longpolling.ut
 
     private void sendPhotoWithButtons(long chatId, Anime anime, String currentState) {
         if (anime == null) return;
-        InlineKeyboardMarkup keyboard = buildAnimeKeyboard(anime, currentState);
-        String caption = "<b>" + anime.getAttributes().getCanonicalTitle() + "</b>\n"
-                + "Episodi: " + anime.getAttributes().getEpisodeCount() + "\n"
-                + "Rating: " + anime.getAttributes().getAverageRating() + "\n"
-                + "Status: " + anime.getAttributes().getStatus() + "\n\n";
+        try {
+            boolean isFavorite = Database.getInstance().isFavorite(chatId, anime.getId());
+            InlineKeyboardMarkup keyboard = buildAnimeKeyboard(anime, currentState, isFavorite);
+            String caption = "<b>" + anime.getAttributes().getCanonicalTitle() + "</b>\n"
+                    + "Episodes: " + anime.getAttributes().getEpisodeCount() + "\n"
+                    + "Rating: " + anime.getAttributes().getAverageRating() + "\n"
+                    + "Status: " + anime.getAttributes().getStatus() + "\n\n";
 
-        try { telegramClient.execute(SendPhoto.builder().chatId(chatId).photo(new InputFile(anime.getAttributes().getPosterImage().getOriginal())).caption(caption).parseMode("HTML").replyMarkup(keyboard).build()); } catch (TelegramApiException e) { e.printStackTrace(); }
+            telegramClient.execute(SendPhoto.builder().chatId(chatId).photo(new InputFile(anime.getAttributes().getPosterImage().getOriginal())).caption(caption).parseMode("HTML").replyMarkup(keyboard).build());
+        }
+        catch (Exception e) { e.printStackTrace(); }
     }
 
     @Override
