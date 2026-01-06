@@ -97,7 +97,7 @@ Il bot supporta la ricerca inline di Telegram.
 I risultati vengono recuperati dinamicamente tramite l'API Kitsu.
 
 ------------------------------------------------------------
-STATISTICHE E QUERY IMPLEMENTATE
+STATISTICHE DISPONIBILI
 ------------------------------------------------------------
 
 Alcuni esempi di statistiche fornite dal bot:
