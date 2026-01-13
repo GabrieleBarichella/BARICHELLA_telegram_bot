@@ -60,12 +60,10 @@ SETUP DATABASE
 ------------------------------------------------------------
 
 Per inizializzare il database è necessario utilizzare il file:
-database_example.sql
+database.example.db
 
-Il file contiene la struttura completa di tutte le tabelle richieste
-dal progetto e le relative relazioni.
-
-Creare un database vuoto e inserire le tabelle fornite.
+Il file contiene un database pronto all'utilizzo. Per fare in modo
+che il bot funzioni come previsto, rinominare il file in 'database.db'
 
 Relazioni:
 - N a N tra Anime e Utenti
